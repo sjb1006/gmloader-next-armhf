@@ -54,8 +54,21 @@ jobs:
 
     - name: Build GMLoader-Next
       run: |
-        # 关键修复：强行告诉编译器去哪里找 zipconf.h 和 libbsd 的头文件
-        export CPATH="$PWD/3rdparty/libzip-config:$PWD/3rdparty/libbsd-config:$CPATH"
+        # 1. 确保 zipconf.h 存在 (如果构建系统尚未生成)
+        if [ ! -f "3rdparty/libzip-config/zipconf.h" ]; then
+          echo "zipconf.h not found, attempting to locate..."
+          # 有些版本的 libzip 源码里会自带 zipconf.h.in，可以简单替换
+          if [ -f "3rdparty/libzip/zipconf.h.in" ]; then
+            cp "3rdparty/libzip/zipconf.h.in" "3rdparty/libzip-config/zipconf.h"
+          fi
+        fi
+
+        # 2. 强制将项目的 libzip 和 config 目录放在所有包含路径的最前面
+        export CFLAGS="-I$PWD/3rdparty/libzip/lib -I$PWD/3rdparty/libzip-config -I$PWD/3rdparty/libbsd/include -I$PWD/3rdparty/libbsd-config $CFLAGS"
+        export CXXFLAGS="-I$PWD/3rdparty/libzip/lib -I$PWD/3rdparty/libzip-config -I$PWD/3rdparty/libbsd/include -I$PWD/3rdparty/libbsd-config $CXXFLAGS"
+        
+        # 原有的 CPATH 可以保留，作为额外保障
+        export CPATH="$PWD/3rdparty/libzip-config:$PWD/3rdparty/libzip/lib:$PWD/3rdparty/libbsd-config:$CPATH"
         
         make -f Makefile.gmloader \
           ARCH=arm-linux-gnueabihf \
