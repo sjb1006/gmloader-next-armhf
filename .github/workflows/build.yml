@@ -20,20 +20,29 @@ jobs:
         # 1. 开启 armhf 架构支持
         sudo dpkg --add-architecture armhf
 
-        # 2. 将默认源锁定为 amd64 架构，避免 apt 在错误的位置查找 armhf 包
-        sudo sed -i -e 's/deb http/deb [arch=amd64] http/g' /etc/apt/sources.list
+        # 2. 彻底删除系统原有的乱七八糟的源，防止干扰
+        sudo rm -f /etc/apt/sources.list
+        sudo rm -f /etc/apt/sources.list.d/*.list
+        sudo rm -f /etc/apt/sources.list.d/*.sources
 
-        # 3. 为 armhf 架构添加专用的 ports 源
-        sudo dd of=/etc/apt/sources.list.d/armhf.list <<EOF
+        # 3. 写入纯净的 amd64 源（只找 x86_64 的包）
+        sudo tee /etc/apt/sources.list.d/amd64.list <<EOF
+        deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy main restricted universe multiverse
+        deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy-updates main restricted universe multiverse
+        deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy-security main restricted universe multiverse
+        EOF
+
+        # 4. 写入纯净的 armhf 源（只找 ARM 的包，指定 ports.ubuntu.com）
+        sudo tee /etc/apt/sources.list.d/armhf.list <<EOF
         deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports jammy main restricted universe multiverse
         deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports jammy-updates main restricted universe multiverse
         deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports jammy-security main restricted universe multiverse
         EOF
 
-        # 4. 更新软件包列表
+        # 5. 更新软件包列表
         sudo apt-get update
         
-        # 5. 安装交叉编译工具链、LLVM、Python 绑定和 ARM 架构的 SDL2 开发库
+        # 6. 安装依赖（宿主编译器 + ARM 交叉编译工具 + ARM 架构的 SDL2）
         sudo apt-get install -y \
           gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf \
           libc6-dev-armhf-cross libstdc++-11-dev-armhf-cross \
@@ -41,7 +50,7 @@ jobs:
           pkg-config \
           libsdl2-dev:armhf
         
-        # 6. 创建 pkg-config 软链接，确保交叉编译能找到正确的库
+        # 7. 创建 pkg-config 软链接，确保交叉编译能找到正确的库
         sudo ln -sf /usr/bin/pkg-config /usr/bin/arm-linux-gnueabihf-pkg-config
         echo "PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig" >> $GITHUB_ENV
 
