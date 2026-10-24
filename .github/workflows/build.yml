@@ -54,21 +54,39 @@ jobs:
 
     - name: Build GMLoader-Next
       run: |
-        # 1. 确保 zipconf.h 存在 (如果构建系统尚未生成)
-        if [ ! -f "3rdparty/libzip-config/zipconf.h" ]; then
-          echo "zipconf.h not found, attempting to locate..."
-          # 有些版本的 libzip 源码里会自带 zipconf.h.in，可以简单替换
+        # --- 关键修复开始 ---
+        echo "=== 检查并生成 zipconf.h ==="
+        ZIPCONF_PATH="3rdparty/libzip-config/zipconf.h"
+        if [ ! -f "$ZIPCONF_PATH" ]; then
+          echo "zipconf.h 未找到，正在从 zipconf.h.in 生成..."
+          # 查找源文件 zipconf.h.in
           if [ -f "3rdparty/libzip/zipconf.h.in" ]; then
-            cp "3rdparty/libzip/zipconf.h.in" "3rdparty/libzip-config/zipconf.h"
+            # 复制并替换其中的 CMake 变量占位符（模拟 configure 过程）
+            sed -e 's/#cmakedefine HAVE_INT8_T_LIBZIP/#define HAVE_INT8_T_LIBZIP/' \
+                -e 's/#cmakedefine HAVE_UINT8_T_LIBZIP/#define HAVE_UINT8_T_LIBZIP/' \
+                -e 's/#cmakedefine HAVE_INT16_T_LIBZIP/#define HAVE_INT16_T_LIBZIP/' \
+                -e 's/#cmakedefine HAVE_UINT16_T_LIBZIP/#define HAVE_UINT16_T_LIBZIP/' \
+                -e 's/#cmakedefine HAVE_INT32_T_LIBZIP/#define HAVE_INT32_T_LIBZIP/' \
+                -e 's/#cmakedefine HAVE_UINT32_T_LIBZIP/#define HAVE_UINT32_T_LIBZIP/' \
+                -e 's/#cmakedefine HAVE_INT64_T_LIBZIP/#define HAVE_INT64_T_LIBZIP/' \
+                -e 's/#cmakedefine HAVE_UINT64_T_LIBZIP/#define HAVE_UINT64_T_LIBZIP/' \
+                -e 's/#cmakedefine HAVE_SSIZE_T_LIBZIP/#define HAVE_SSIZE_T_LIBZIP/' \
+                "3rdparty/libzip/zipconf.h.in" > "$ZIPCONF_PATH"
+            echo "已生成 $ZIPCONF_PATH"
+          else
+            echo "错误：未找到 zipconf.h.in，无法自动生成 zipconf.h"
+            exit 1
           fi
+        else
+          echo "zipconf.h 已存在。"
         fi
+        # --- 关键修复结束 ---
 
-        # 2. 强制将项目的 libzip 和 config 目录放在所有包含路径的最前面
-        export CFLAGS="-I$PWD/3rdparty/libzip/lib -I$PWD/3rdparty/libzip-config -I$PWD/3rdparty/libbsd/include -I$PWD/3rdparty/libbsd-config $CFLAGS"
-        export CXXFLAGS="-I$PWD/3rdparty/libzip/lib -I$PWD/3rdparty/libzip-config -I$PWD/3rdparty/libbsd/include -I$PWD/3rdparty/libbsd-config $CXXFLAGS"
+        # 设置包含路径，优先级从高到低
+        export CPATH="$PWD/3rdparty/libzip-config:$PWD/3rdparty/libzip/lib:$PWD/3rdparty/libbsd-config:$PWD/3rdparty/libbsd/include:$CPATH"
         
-        # 原有的 CPATH 可以保留，作为额外保障
-        export CPATH="$PWD/3rdparty/libzip-config:$PWD/3rdparty/libzip/lib:$PWD/3rdparty/libbsd-config:$CPATH"
+        # 清理可能存在的旧构建缓存，强制重新编译
+        rm -rf build/arm-linux-gnueabihf/
         
         make -f Makefile.gmloader \
           ARCH=arm-linux-gnueabihf \
