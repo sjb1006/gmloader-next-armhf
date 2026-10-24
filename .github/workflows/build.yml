@@ -28,3 +28,9 @@ jobs:
         with:
           name: gmloadernext-armhf
           path: ./gmloadernext.armhf # 或你的实际输出文件名
+          
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          # 增加 python3-clang-11 依赖
+          sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-dev-armhf-cross llvm-11 python3-clang-11
