@@ -17,76 +17,71 @@ jobs:
 
     - name: Install Dependencies
       run: |
-        # 1. 开启 armhf 架构支持
+        # 1. 开启 armhf 架构支持并配置源 (此部分保持不变)
         sudo dpkg --add-architecture armhf
-
-        # 2. 彻底删除系统原有的源
         sudo rm -f /etc/apt/sources.list
         sudo rm -f /etc/apt/sources.list.d/*.list
         sudo rm -f /etc/apt/sources.list.d/*.sources
 
-        # 3. 写入纯净的 amd64 源
         sudo tee /etc/apt/sources.list.d/amd64.list <<EOF
         deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy main restricted universe multiverse
         deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy-updates main restricted universe multiverse
         deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy-security main restricted universe multiverse
         EOF
 
-        # 4. 写入纯净的 armhf 源
         sudo tee /etc/apt/sources.list.d/armhf.list <<EOF
         deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports jammy main restricted universe multiverse
         deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports jammy-updates main restricted universe multiverse
         deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports jammy-security main restricted universe multiverse
         EOF
 
-        # 5. 更新并安装
         sudo apt-get update
+        
+        # 2. 安装所有依赖，注意这里额外安装了 cmake，用于构建 libzip
         sudo apt-get install -y \
           gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf \
           libc6-dev-armhf-cross libstdc++-11-dev-armhf-cross \
           llvm-11 libclang-11-dev python3-clang-11 \
-          pkg-config \
+          pkg-config cmake \
           libsdl2-dev:armhf
         
-        # 6. 配置 pkg-config
+        # 3. 配置 pkg-config
         sudo ln -sf /usr/bin/pkg-config /usr/bin/arm-linux-gnueabihf-pkg-config
         echo "PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig" >> $GITHUB_ENV
 
+    - name: Build libzip Dependencies
+      run: |
+        # 进入 libzip 源码目录，使用 CMake 生成正确的构建文件
+        cd 3rdparty/libzip
+        mkdir -p build_armhf && cd build_armhf
+        
+        # 关键：通过 CMake 为 armhf 架构配置 libzip
+        cmake .. \
+          -DCMAKE_SYSTEM_NAME=Linux \
+          -DCMAKE_SYSTEM_PROCESSOR=arm \
+          -DCMAKE_C_COMPILER=arm-linux-gnueabihf-gcc \
+          -DCMAKE_CXX_COMPILER=arm-linux-gnueabihf-g++ \
+          -DBUILD_SHARED_LIBS=OFF \
+          -DBUILD_TOOLS=OFF \
+          -DBUILD_REGRESS=OFF \
+          -DBUILD_EXAMPLES=OFF \
+          -DBUILD_DOC=OFF \
+          -DCMAKE_INSTALL_PREFIX=../../libzip-install
+        
+        # 执行编译和安装（安装到指定前缀目录）
+        make -j$(nproc)
+        make install
+        
+        # 回到项目根目录
+        cd ../../..
+
     - name: Build GMLoader-Next
       run: |
-        # --- 关键修复开始 ---
-        echo "=== 检查并生成 zipconf.h ==="
-        ZIPCONF_PATH="3rdparty/libzip-config/zipconf.h"
-        if [ ! -f "$ZIPCONF_PATH" ]; then
-          echo "zipconf.h 未找到，正在从 zipconf.h.in 生成..."
-          # 查找源文件 zipconf.h.in
-          if [ -f "3rdparty/libzip/zipconf.h.in" ]; then
-            # 复制并替换其中的 CMake 变量占位符（模拟 configure 过程）
-            sed -e 's/#cmakedefine HAVE_INT8_T_LIBZIP/#define HAVE_INT8_T_LIBZIP/' \
-                -e 's/#cmakedefine HAVE_UINT8_T_LIBZIP/#define HAVE_UINT8_T_LIBZIP/' \
-                -e 's/#cmakedefine HAVE_INT16_T_LIBZIP/#define HAVE_INT16_T_LIBZIP/' \
-                -e 's/#cmakedefine HAVE_UINT16_T_LIBZIP/#define HAVE_UINT16_T_LIBZIP/' \
-                -e 's/#cmakedefine HAVE_INT32_T_LIBZIP/#define HAVE_INT32_T_LIBZIP/' \
-                -e 's/#cmakedefine HAVE_UINT32_T_LIBZIP/#define HAVE_UINT32_T_LIBZIP/' \
-                -e 's/#cmakedefine HAVE_INT64_T_LIBZIP/#define HAVE_INT64_T_LIBZIP/' \
-                -e 's/#cmakedefine HAVE_UINT64_T_LIBZIP/#define HAVE_UINT64_T_LIBZIP/' \
-                -e 's/#cmakedefine HAVE_SSIZE_T_LIBZIP/#define HAVE_SSIZE_T_LIBZIP/' \
-                "3rdparty/libzip/zipconf.h.in" > "$ZIPCONF_PATH"
-            echo "已生成 $ZIPCONF_PATH"
-          else
-            echo "错误：未找到 zipconf.h.in，无法自动生成 zipconf.h"
-            exit 1
-          fi
-        else
-          echo "zipconf.h 已存在。"
-        fi
-        # --- 关键修复结束 ---
-
-        # 设置包含路径，优先级从高到低
-        export CPATH="$PWD/3rdparty/libzip-config:$PWD/3rdparty/libzip/lib:$PWD/3rdparty/libbsd-config:$PWD/3rdparty/libbsd/include:$CPATH"
-        
         # 清理可能存在的旧构建缓存，强制重新编译
         rm -rf build/arm-linux-gnueabihf/
+        
+        # 设置包含路径，优先指向我们刚刚安装的、为 armhf 编译的 libzip
+        export CPATH="$PWD/3rdparty/libzip-install/include:$PWD/3rdparty/libbsd-config:$PWD/3rdparty/libbsd/include:$CPATH"
         
         make -f Makefile.gmloader \
           ARCH=arm-linux-gnueabihf \
