@@ -20,29 +20,27 @@ jobs:
         # 1. 开启 armhf 架构支持
         sudo dpkg --add-architecture armhf
 
-        # 2. 彻底删除系统原有的乱七八糟的源，防止干扰
+        # 2. 彻底删除系统原有的源
         sudo rm -f /etc/apt/sources.list
         sudo rm -f /etc/apt/sources.list.d/*.list
         sudo rm -f /etc/apt/sources.list.d/*.sources
 
-        # 3. 写入纯净的 amd64 源（只找 x86_64 的包）
+        # 3. 写入纯净的 amd64 源
         sudo tee /etc/apt/sources.list.d/amd64.list <<EOF
         deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy main restricted universe multiverse
         deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy-updates main restricted universe multiverse
         deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy-security main restricted universe multiverse
         EOF
 
-        # 4. 写入纯净的 armhf 源（只找 ARM 的包，指定 ports.ubuntu.com）
+        # 4. 写入纯净的 armhf 源
         sudo tee /etc/apt/sources.list.d/armhf.list <<EOF
         deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports jammy main restricted universe multiverse
         deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports jammy-updates main restricted universe multiverse
         deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports jammy-security main restricted universe multiverse
         EOF
 
-        # 5. 更新软件包列表
+        # 5. 更新并安装
         sudo apt-get update
-        
-        # 6. 安装依赖（宿主编译器 + ARM 交叉编译工具 + ARM 架构的 SDL2）
         sudo apt-get install -y \
           gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf \
           libc6-dev-armhf-cross libstdc++-11-dev-armhf-cross \
@@ -50,12 +48,15 @@ jobs:
           pkg-config \
           libsdl2-dev:armhf
         
-        # 7. 创建 pkg-config 软链接，确保交叉编译能找到正确的库
+        # 6. 配置 pkg-config
         sudo ln -sf /usr/bin/pkg-config /usr/bin/arm-linux-gnueabihf-pkg-config
         echo "PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig:/usr/share/pkgconfig" >> $GITHUB_ENV
 
     - name: Build GMLoader-Next
       run: |
+        # 关键修复：强行告诉编译器去哪里找 zipconf.h 和 libbsd 的头文件
+        export CPATH="$PWD/3rdparty/libzip-config:$PWD/3rdparty/libbsd-config:$CPATH"
+        
         make -f Makefile.gmloader \
           ARCH=arm-linux-gnueabihf \
           LLVM_FILE=/usr/lib/llvm-11/lib/libclang-11.so.1 \
