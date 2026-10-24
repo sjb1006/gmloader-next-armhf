@@ -1,36 +1,40 @@
 name: Build GMLoader-Next for armhf
-on: [push, workflow_dispatch]
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
 
 jobs:
   build:
+    # 必须用 ubuntu-22.04，因为 24.04 官方源里没有 llvm-11
     runs-on: ubuntu-22.04
+
     steps:
-      - name: Checkout with submodules
-        uses: actions/checkout@v4
-        with:
-          submodules: 'recursive' # 必须递归克隆子模块
+    - name: Checkout with submodules
+      uses: actions/checkout@v4
+      with:
+        submodules: 'recursive'
 
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-dev-armhf-cross llvm-11
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        # 安装工具链、LLVM、以及关键的 python3-clang-11
+        sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-dev-armhf-cross llvm-11 libclang-11-dev python3-clang-11 pkg-config
+        # 解决日志中的 arm-linux-gnueabihf-pkg-config 警告
+        sudo ln -s /usr/bin/pkg-config /usr/bin/arm-linux-gnueabihf-pkg-config
 
-      - name: Build GMLoader-Next
-        run: |
-          make -f Makefile.gmloader \
-            ARCH=arm-linux-gnueabihf \
-            LLVM_FILE=/usr/lib/llvm-11/lib/libclang-11.so.1 \
-            LLVM_INC=/usr/arm-linux-gnueabihf/include/c++/10/arm-linux-gnueabihf \
-            -j$(nproc)
+    - name: Build GMLoader-Next
+      run: |
+        make -f Makefile.gmloader \
+          ARCH=arm-linux-gnueabihf \
+          LLVM_FILE=/usr/lib/llvm-11/lib/libclang-11.so.1 \
+          LLVM_INC=/usr/arm-linux-gnueabihf/include \
+          -j$(nproc)
 
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: gmloadernext-armhf
-          path: ./gmloadernext.armhf # 或你的实际输出文件名
-          
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update
-          # 增加 python3-clang-11 依赖
-          sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-dev-armhf-cross llvm-11 python3-clang-11
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: gmloadernext-armhf
+        # 编译产物通常会在这个目录下
+        path: ./gmloadernext.armhf
