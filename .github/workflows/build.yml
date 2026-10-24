@@ -7,7 +7,6 @@ on:
 
 jobs:
   build:
-    # 必须用 ubuntu-22.04，因为 24.04 官方源里没有 llvm-11
     runs-on: ubuntu-22.04
 
     steps:
@@ -19,22 +18,23 @@ jobs:
     - name: Install Dependencies
       run: |
         sudo apt-get update
-        # 安装工具链、LLVM、以及关键的 python3-clang-11
-        sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-dev-armhf-cross llvm-11 libclang-11-dev python3-clang-11 pkg-config
-        # 解决日志中的 arm-linux-gnueabihf-pkg-config 警告
+        # 1. 增加了 libstdc++-11-dev-armhf-cross，提供缺失的 bits/c++config.h
+        # 2. 增加了 libsdl2-dev，解决 pkg-config 的警告
+        sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf libc6-dev-armhf-cross libstdc++-11-dev-armhf-cross llvm-11 libclang-11-dev python3-clang-11 pkg-config libsdl2-dev
+        # 解决 arm-linux-gnueabihf-pkg-config 找不到的问题
         sudo ln -s /usr/bin/pkg-config /usr/bin/arm-linux-gnueabihf-pkg-config
 
     - name: Build GMLoader-Next
       run: |
+        # 关键修改：在 LLVM_INC 中补全了 C++ 11 的头文件路径
         make -f Makefile.gmloader \
           ARCH=arm-linux-gnueabihf \
           LLVM_FILE=/usr/lib/llvm-11/lib/libclang-11.so.1 \
-          LLVM_INC=/usr/arm-linux-gnueabihf/include \
+          LLVM_INC="/usr/arm-linux-gnueabihf/include /usr/arm-linux-gnueabihf/include/c++/11 /usr/arm-linux-gnueabihf/include/c++/11/arm-linux-gnueabihf" \
           -j$(nproc)
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
         name: gmloadernext-armhf
-        # 编译产物通常会在这个目录下
         path: ./gmloadernext.armhf
