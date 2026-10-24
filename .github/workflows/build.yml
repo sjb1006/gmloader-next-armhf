@@ -75,8 +75,16 @@ jobs:
           LLVM_INC="/usr/arm-linux-gnueabihf/include /usr/arm-linux-gnueabihf/include/c++/11 /usr/arm-linux-gnueabihf/include/c++/11/arm-linux-gnueabihf" \
           -j$(nproc)
 
+    - name: Check Build Output
+      run: |
+        echo "=== 搜索实际生成的产物 ==="
+        find . -maxdepth 3 -name "gmloader*" -type f -not -path "./.git/*"
+
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
         name: gmloadernext-armhf
-        path: ./gmloadernext.armhf
+        # 使用通配符，自动匹配当前目录或 build 目录下所有带 gmloader 的文件
+        path: |
+          gmloader*
+          build/**/gmloader*
